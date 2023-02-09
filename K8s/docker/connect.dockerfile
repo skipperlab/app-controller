@@ -1,6 +1,6 @@
 FROM alpine:3.16
 
-LABEL maintainer "https://github.com/skipperlab"
+LABEL maintainer="https://github.com/skipperlab"
 
 ENV KAFKA_VERSION 3.3.2
 ENV SCALA_VERSION 2.13
