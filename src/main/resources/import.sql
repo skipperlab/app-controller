@@ -1,0 +1,1 @@
+insert into palette (id, name, kafka_type, yaml_path, config_template) values (10001, 'DataGen', 1, 'connect.yaml', '["connect_name", "bootstrap_servers", "key_converter", "value_converter", "connect_replicas"]');

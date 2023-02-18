@@ -1,0 +1,85 @@
+###
+GET http://localhost:8080/api
+
+
+###
+GET http://localhost:8080/api/palettes
+###
+GET http://localhost:8080/api/topics
+###
+GET http://localhost:8080/api/workloads
+###
+GET http://localhost:8080/api/workspaces
+
+
+###
+GET http://localhost:8080/api/workloads/1/workspace
+###
+GET http://localhost:8080/api/workloads/1/palette
+
+###
+GET http://localhost:8080/api/palettes/search/findByName?name=DataGen
+###
+GET http://localhost:8080/api/topics/search/findByName?name=data-gen-topic
+###
+GET http://localhost:8080/api/workloads/search/findByName?name=data-gen-work
+###
+GET http://localhost:8080/api/workspaces/search/findByName?name=data-get-test
+
+
+###
+POST http://localhost:8080/api/workspaces
+Content-Type: application/json
+
+{
+  "name": "data-get-test",
+  "status": "Define",
+  "context": "{\"topics\":[{\"name\":\"data-gen-topic\"}],\"workloads\":[{\"name\":\"data-gen-work\"}]}",
+  "config": "[{\"bootstrap_servers\":\"141.164.42.200:9092\"}, {\"key_converter\":\"org.apache.kafka.connect.json.JsonConverter\"}, {\"value_converter\":\"org.apache.kafka.connect.json.JsonConverter\"}, {\"connect_replicas\":1}]"
+}
+
+###
+POST http://localhost:8080/api/topics
+Content-Type: application/json
+
+{
+  "name": "data-gen-topic",
+  "partitions": 1,
+  "replicas": 1,
+  "status": "Define",
+  "config": ""
+}
+
+###
+POST http://localhost:8080/api/workloads
+Content-Type: application/json
+
+{
+  "name": "data-gen-work",
+  "palette": "palette/10001",
+  "status": "Define",
+  "workspace": "workspace/1",
+  "config": "[{\"connect_name\":\"data-gen-work\"}]"
+}
+
+
+
+###
+GET http://localhost:8080/api/deploy/status/1
+Content-Type: application/json
+
+###
+POST http://localhost:8080/api/deploy/status/1
+Content-Type: application/json
+
+{}
+
+###
+POST http://localhost:8080/api/deploy/do/1
+Content-Type: application/json
+
+{}
+
+###
+DELETE http://localhost:8080/api/deploy/do/1
+Content-Type: application/json

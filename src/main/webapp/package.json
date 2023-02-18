@@ -1,5 +1,5 @@
 {
-  "name": "app-deploy",
+  "name": "app-controller",
   "version": "0.1.0",
   "private": true,
   "dependencies": {

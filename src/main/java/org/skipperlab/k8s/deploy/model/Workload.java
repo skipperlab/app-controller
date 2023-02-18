@@ -16,7 +16,6 @@ public class Workload {
     @ManyToOne
     @JoinColumn(name="palette_id")
     private Palette palette;
-    private KafkaType kafkaType;
     @Column(unique=true, nullable = false)
     private String name;
     @ManyToOne
@@ -25,8 +24,8 @@ public class Workload {
     private StatusType status;
     @Column(columnDefinition = "TEXT")
     private String config;
-
     public String getNameSpace() {
-        return null;
+        if(workspace != null) return workspace.getName();
+        else return this.getName();
     }
 }

@@ -36,9 +36,14 @@ public class KafkaService {
                 .collect(Collectors.toList());
     }
 
-    public Topic getTopic(String name) throws ExecutionException, InterruptedException {
+    public Topic getTopic(String name) {
         DescribeTopicsResult topicsResult = this.adminClient.describeTopics(Arrays.asList(name));
-        TopicDescription topicDescription = topicsResult.allTopicNames().get().get(name);
+        TopicDescription topicDescription = null;
+        try {
+            topicDescription = topicsResult.allTopicNames().get().get(name);
+        } catch (Exception e) {
+            return null;
+        }
         if(topicDescription != null) {
             return this.fromTopicDescription(topicDescription);
         } else {
@@ -46,13 +51,23 @@ public class KafkaService {
         }
     }
 
-    public Topic getTopicAndConfig(String name) throws ExecutionException, InterruptedException, JsonProcessingException {
+    public Topic getTopicAndConfig(String name) {
         DescribeTopicsResult topicsResult = this.adminClient.describeTopics(Arrays.asList(name));
-        TopicDescription topicDescription = topicsResult.allTopicNames().get().get(name);
+        TopicDescription topicDescription = null;
+        try {
+            topicDescription = topicsResult.allTopicNames().get().get(name);
+        } catch (Exception e) {
+            return null;
+        }
         if(topicDescription != null) {
             Collection<ConfigResource> configResources =  Collections.singleton( new ConfigResource(ConfigResource.Type.TOPIC, name));
             DescribeConfigsResult configsResult = this.adminClient.describeConfigs(configResources);
-            Config configs = (Config)configsResult.all().get().values().toArray()[0];
+            Config configs = null;
+            try {
+                configs = (Config)configsResult.all().get().values().toArray()[0];
+            } catch (Exception e) {
+                return null;
+            }
             if(configs != null) {
                 return this.fromTopicDescriptionAndConfig(topicDescription, configs);
             } else {
@@ -65,7 +80,7 @@ public class KafkaService {
 
     public Topic createTopic(Topic topic) throws ExecutionException, InterruptedException, JsonProcessingException, TimeoutException {
         Map<String, String> topicConfig;
-        if(topic.getConfig() != null) {
+        if(topic.getConfig() != null && !topic.getConfig().isEmpty()) {
             Collection<ConfigEntry> configs = mapper.readValue(topic.getConfig(), new TypeReference<Collection<ConfigEntry>>(){});
             topicConfig = configs.stream().collect(Collectors.toMap(ConfigEntry::name, ConfigEntry::value));
         } else {

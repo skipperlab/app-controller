@@ -1,97 +1,81 @@
-insert into palette (id, name, context, config_template)
-values (10001
-, 'Connect'
-, 'apiVersion: v1
+apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: connect-app-1
+  name: ${connect_name}
 data:
-  key-name: "value"
-
   connect-distributed.properties: |
-    bootstrap.servers=141.164.42.200:9092
+    bootstrap.servers=${bootstrap_servers}
     plugin.path=/opt/connectors
-    group.id=connect-app-1
-
-    key.converter=org.apache.kafka.connect.json.JsonConverter
+    group.id=${connect_name}
+    key.converter=<#if key_converter??>${key_converter}<#else>org.apache.kafka.connect.string.StringConverter</#if>
     key.converter.schemas.enable=true
-    value.converter=org.apache.kafka.connect.json.JsonConverter
+    value.converter=<#if value_converter??>${value_converter}<#else>org.apache.kafka.connect.string.StringConverter</#if>
     value.converter.schemas.enable=true
-
     offset.storage.topic=connect-offsets
-    offset.storage.replication.factor=1
-    #offset.storage.partitions=25
+    #offset.storage.replication.factor=1
+    #offset.storage.partitions=1
     offset.flush.interval.ms=10000
-
     config.storage.topic=connect-configs
     config.storage.replication.factor=1
     status.storage.topic=connect-status
     status.storage.replication.factor=1
     #status.storage.partitions=5
-
     #listeners=HTTP://:8083
     #rest.advertised.host.name=
     #rest.advertised.port=
     #rest.advertised.listener=
-
   connect-log4j.properties: |
     log4j.rootLogger=INFO, stdout, connectAppender
-
     log4j.appender.stdout=org.apache.log4j.ConsoleAppender
     log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
-
     log4j.appender.connectAppender=org.apache.log4j.DailyRollingFileAppender
-    log4j.appender.connectAppender.DatePattern=\'.\'yyyy-MM-dd-HH
-    log4j.appender.connectAppender.File=${kafka.logs.dir}/connect.log
+    log4j.appender.connectAppender.DatePattern='.'yyyy-MM-dd-HH
+    log4j.appender.connectAppender.File=<#if logs_dir??>${logs_dir}<#else>/tmp</#if>/connect.log
     log4j.appender.connectAppender.layout=org.apache.log4j.PatternLayout
-
-    connect.log.pattern=[%d] %p %X{connector.context}%m (%c:%L)%n
-
-    log4j.appender.stdout.layout.ConversionPattern=${connect.log.pattern}
-    log4j.appender.connectAppender.layout.ConversionPattern=${connect.log.pattern}
-
+    #connect.log.pattern=[%d] %p %X{connector.context}%m (%c:%L)%n
+    log4j.appender.stdout.layout.ConversionPattern=[%d] %p %X{connector.context}%m (%c:%L)%n
+    log4j.appender.connectAppender.layout.ConversionPattern=[%d] %p %X{connector.context}%m (%c:%L)%n
     log4j.logger.org.apache.zookeeper=ERROR
     log4j.logger.org.reflections=ERROR
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: connect-app-1
+  name: ${connect_name}
   labels:
-    app: connect-app-1
+    app: ${connect_name}
 spec:
-  replicas: 1
+  replicas: ${connect_replicas}
   selector:
     matchLabels:
-      app: connect-app-1
+      app: ${connect_name}
   template:
     metadata:
       labels:
-        app: connect-app-1
+        app: ${connect_name}
     spec:
       containers:
-        - name: connect-app-1
+        - name: ${connect_name}
           image: skipperlab/connect:v3.3.2
           command: ["connect-distributed.sh", "config/connect-distributed.properties"]
           ports:
             - containerPort: 8083
           volumeMounts:
-            - name: config-app
+            - name: config-${connect_name}
               mountPath: "/opt/kafka/config"
               readOnly: true
-            - name: connectors-app
+            - name: connectors-${connect_name}
               mountPath: "/opt/connectors"
               readOnly: true
       volumes:
-        - name: config-app
+        - name: config-${connect_name}
           configMap:
-            name: connect-app-1
+            name: ${connect_name}
             items:
               - key: "connect-log4j.properties"
                 path: "connect-log4j.properties"
               - key: "connect-distributed.properties"
                 path: "connect-distributed.properties"
-        - name: connectors-app
+        - name: connectors-${connect_name}
           persistentVolumeClaim:
-            claimName: pvc-connectors'
-, '["bootstrap.servers", "app.name", "key.converter", "value.converter"]');
+            claimName: pvc-connectors

@@ -25,13 +25,10 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-rest</artifactId>
         </dependency>
+
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-thymeleaf</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
+            <groupId>org.freemarker</groupId>
+            <artifactId>freemarker</artifactId>
         </dependency>
 
         <dependency>
@@ -59,11 +56,6 @@
             <artifactId>bcprov-ext-jdk15on</artifactId>
             <version>1.69</version>
         </dependency>
-        <dependency>
-            <groupId>ru.proninyaroslav</groupId>
-            <artifactId>java-template-engine</artifactId>
-            <version>1.2</version>
-        </dependency>
 
         <!--dependency>
             <groupId>com.h2database</groupId>
@@ -71,8 +63,8 @@
             <scope>runtime</scope>
         </dependency-->
         <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
+            <groupId>org.mariadb.jdbc</groupId>
+            <artifactId>mariadb-java-client</artifactId>
             <scope>runtime</scope>
         </dependency>
 

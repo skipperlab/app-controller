@@ -18,8 +18,8 @@ public class Palette {
     private Long id;
     @Column(unique=true, nullable = false)
     private String name;
-    @Column(columnDefinition = "TEXT")
-    private String context;
+    private KafkaType kafkaType;
+    private String yamlPath;
     @Column(columnDefinition = "TEXT")
     private String configTemplate;
 }
