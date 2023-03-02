@@ -5,21 +5,21 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Entity
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class Topic {
+public class Command {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Long id;
-    private String topicId;
-    @Column(unique=true, nullable = false)
     private String name;
-    private Boolean isInternal;
-    private Integer partitions;
-    private Integer replicas;
-    private StatusType status;
-    @Column(columnDefinition = "TEXT")
-    private String config;
+    private CommandType commandType;
+    @ManyToMany(mappedBy = "commands")
+    private List<Palette> palettes;
+    private String httpMethod;
+    private String httpPath;
+    private String httpBody;
 }

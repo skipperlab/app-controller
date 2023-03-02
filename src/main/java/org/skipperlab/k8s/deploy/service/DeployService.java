@@ -1,19 +1,16 @@
 package org.skipperlab.k8s.deploy.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.skipperlab.k8s.deploy.model.StatusType;
-import org.skipperlab.k8s.deploy.model.Topic;
-import org.skipperlab.k8s.deploy.model.Workload;
-import org.skipperlab.k8s.deploy.model.Workspace;
+import org.skipperlab.k8s.deploy.model.*;
 import org.skipperlab.k8s.deploy.repository.TopicRepository;
 import org.skipperlab.k8s.deploy.repository.WorkloadRepository;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class DeployService {
@@ -32,11 +29,12 @@ public class DeployService {
     }
 
     public Workspace doDeploy(Workspace workspace) {
-        Workspace existWorkspace = this.getDeploy(workspace);
+        Workspace existWorkspace = this.getStatus(workspace);
         if (Arrays.asList(new StatusType[]{StatusType.Define, StatusType.Deployed})
                 .contains(existWorkspace.getStatus()))
         {
-            List<Topic> topics = this.getTopics(workspace.getContext());
+            List<Workload> workloads = this.workloadRepository.findByWorkspaceId(workspace.getId());
+            List<Topic> topics = this.getTopics(workloads);
             topics.forEach(topic -> {
                 try {
                     this.kafkaService.createTopic(topic);
@@ -44,7 +42,6 @@ public class DeployService {
                     throw new RuntimeException(e);
                 }
             });
-            List<Workload> workloads = this.getWorkloads(workspace.getContext());
             workloads.forEach(workload -> {
                 try {
                     Workload newWorkload = this.kubernetesService.createDeployment(workload);
@@ -60,56 +57,64 @@ public class DeployService {
         return workspace;
     }
 
-    private List<Topic> getTopics(String context) {
-        List<Topic> result = new ArrayList<>();
-
-        JsonNode jsonNode = this.readContext(context);
-        jsonNode.withArray("topics").forEach(topic -> {
-            String name = topic.get("name").asText();
-            result.add(this.topicRepository.findByName(name));
-        });
-
+    private List<Topic> getTopics(List<Workload> workloads) {
+        List<Topic> result = workloads.stream()
+                .flatMap(workload -> {
+                    try {
+                        return Stream.concat(
+                                Arrays.stream(objectMapper.readValue(workload.getInputTopics(), String[].class)),
+                                Arrays.stream(objectMapper.readValue(workload.getOutputTopics(), String[].class))
+                        );
+                    } catch (JsonProcessingException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).distinct()
+                .map(topicName -> this.topicRepository.findByName(topicName))
+                .collect(Collectors.toList());
         return result;
-    }
-
-    private List<Workload> getWorkloads(String context) {
-        List<Workload> result = new ArrayList<>();
-
-        JsonNode jsonNode = this.readContext(context);
-        jsonNode.withArray("workloads").forEach(topic -> {
-            String name = topic.get("name").asText();
-            result.add(this.workloadRepository.findByName(name));
-        });
-
-        return result;
-    }
-
-    private JsonNode readContext(String context) {
-        try {
-            return this.objectMapper.readTree(context);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     public Workspace undoDeploy(Workspace workspace) {
-        Workspace existWorkspace = this.getDeploy(workspace);
-        if (Arrays.asList(new StatusType[]{StatusType.Deployed, StatusType.Running, StatusType.Done, StatusType.Error})
+        Workspace existWorkspace = this.getStatus(workspace);
+        if (Arrays.asList(new StatusType[]{StatusType.Deployed, StatusType.Running, StatusType.Stop, StatusType.Done, StatusType.Error})
                 .contains(existWorkspace.getStatus()))
         {
-            //ToDo - Workload 삭제
-            //ToDo - Topic 삭제
+            List<Workload> workloads = this.workloadRepository.findByWorkspaceId(workspace.getId());
+            workloads.forEach(workload -> {
+                try {
+                    Workload oldWorkload = this.kubernetesService.deleteDeployment(workload);
+                    if(oldWorkload != null) {
+                        this.workloadRepository.save(oldWorkload);
+                    }
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
         }
         return null;
     }
 
-    public Workspace setDeploy(Workspace workspace) {
-        //ToDo
-        Workspace existWorkspace = this.getDeploy(workspace);
+    public Workspace setStatus(Workspace workspace, CommandType commandType) {
+        Workspace existWorkspace = this.getStatus(workspace);
+        if (Arrays.asList(new StatusType[]{StatusType.Deployed, StatusType.Running, StatusType.Stop, StatusType.Done, StatusType.Error})
+                .contains(existWorkspace.getStatus()))
+        {
+            List<Workload> workloads = this.workloadRepository.findByWorkspaceId(workspace.getId());
+            workloads.forEach(workload -> {
+                try {
+                    Workload existWorkload = this.kubernetesService.getDeployment(workload.getName(), workload.getNameSpace());
+                    if(existWorkload != null) {
+                        this.workloadRepository.save(existWorkload);
+                    }
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        }
         return null;
     }
 
-    public Workspace getDeploy(Workspace workspace) {
+    public Workspace getStatus(Workspace workspace) {
         String namespace = this.kubernetesService.getNamespace(workspace.getName());
         if(namespace == null) {
             workspace.setStatus(StatusType.Define);

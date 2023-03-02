@@ -1,5 +1,9 @@
 package org.skipperlab.k8s.deploy.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import net.minidev.json.JSONArray;
+import org.skipperlab.k8s.deploy.model.CommandType;
+import org.skipperlab.k8s.deploy.model.StatusType;
 import org.skipperlab.k8s.deploy.model.Workspace;
 import org.skipperlab.k8s.deploy.repository.WorkspaceRepository;
 import org.skipperlab.k8s.deploy.service.DeployService;
@@ -23,24 +27,25 @@ public class DeployController {
     public Workspace getStatues(@PathVariable Long id) {
         Optional<Workspace> workspace = this.workspaceRepository.findById(id);
         if(workspace.isPresent()) {
-            return this.deployService.getDeploy(workspace.get());
+            return this.deployService.getStatus(workspace.get());
         } else {
             throw new ResourceNotFoundException();
         }
     }
 
     @PostMapping("/status/{id}")
-    public Workspace setStatus(@PathVariable Long id) {
+    public Workspace setStatus(@PathVariable Long id, @RequestBody JsonNode body) {
         Optional<Workspace> workspace = this.workspaceRepository.findById(id);
         if(workspace.isPresent()) {
-            return this.deployService.setDeploy(workspace.get());
+            String command = body.get("command").asText("Status");
+            return this.deployService.setStatus(workspace.get(), CommandType.valueOf(command));
         } else {
             throw new ResourceNotFoundException();
         }
     }
 
     @PostMapping("/do/{id}")
-    public Workspace doDeploy(@PathVariable Long id) {
+    public Workspace doDeploy(@PathVariable Long id, @RequestBody JSONArray config) {
         Optional<Workspace> workspace = this.workspaceRepository.findById(id);
         if(workspace.isPresent()) {
             return this.deployService.doDeploy(workspace.get());

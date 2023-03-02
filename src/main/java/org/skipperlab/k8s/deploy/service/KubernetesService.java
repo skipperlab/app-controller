@@ -5,16 +5,17 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
-import io.fabric8.kubernetes.api.model.*;
+import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.fabric8.kubernetes.api.model.Namespace;
+import io.fabric8.kubernetes.api.model.NamespaceBuilder;
+import io.fabric8.kubernetes.api.model.StatusDetails;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.RollableScalableResource;
-import org.skipperlab.k8s.deploy.model.Palette;
 import org.skipperlab.k8s.deploy.model.StatusType;
 import org.skipperlab.k8s.deploy.model.Workload;
-import org.skipperlab.k8s.deploy.model.Workspace;
-import org.skipperlab.k8s.deploy.repository.PaletteRepository;
-import org.skipperlab.k8s.deploy.repository.WorkspaceRepository;
+import org.skipperlab.k8s.deploy.repository.WorkloadRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
@@ -25,16 +26,15 @@ import java.util.stream.Collectors;
 
 @Service
 public class KubernetesService {
-
-    private final PaletteRepository paletteRepository;
-    private final WorkspaceRepository workspaceRepository;
+    @Value("${kubernetes.upload-dir:./yaml}")
+    private String UPLOAD_DIR;
+    private final WorkloadRepository workloadRepository;
     private final KubernetesClient kubernetesClient;
     private final Configuration freeMakerCfg;
     private ObjectMapper objectMapper;
 
-    public KubernetesService(PaletteRepository paletteRepository, WorkspaceRepository workspaceRepository, KubernetesClient kubernetesClient, Configuration configuration) {
-        this.paletteRepository = paletteRepository;
-        this.workspaceRepository = workspaceRepository;
+    public KubernetesService(WorkloadRepository workloadRepository, KubernetesClient kubernetesClient, Configuration configuration) {
+        this.workloadRepository = workloadRepository;
         this.kubernetesClient = kubernetesClient;
         this.freeMakerCfg = configuration;
         this.objectMapper = new ObjectMapper();
@@ -61,7 +61,6 @@ public class KubernetesService {
 
     public Workload createDeployment(Workload workload) {
         String namespace = workload.getNameSpace();
-        String name = workload.getName();
 
         String existNamespace = this.getNamespace(namespace);
         if(existNamespace == null) {
@@ -85,7 +84,7 @@ public class KubernetesService {
                     workload.setStatus(StatusType.Deployed);
                 }
             });
-            return workload; //this.fromDeployment(newResources.get());
+            return workload;
         } else return null;
     }
 
@@ -94,9 +93,13 @@ public class KubernetesService {
         this.getConfig(workload.getWorkspace().getConfig(), root);
         this.getConfig(workload.getConfig(), root);
 
-        String fileName = workload.getPalette().getYamlPath();
-        ClassLoader classLoader = getClass().getClassLoader();
-        InputStream inputStream = classLoader.getResourceAsStream(fileName);
+        String fileName = UPLOAD_DIR + "/" + workload.getPalette().getYamlPath();
+        InputStream inputStream;
+        try {
+            inputStream = new FileInputStream(fileName);
+        } catch (FileNotFoundException e) {
+            throw new RuntimeException(e);
+        }
         Reader in = new InputStreamReader(inputStream);
 
         Writer out = new StringWriter();
@@ -124,28 +127,37 @@ public class KubernetesService {
     }
 
     public Workload deleteDeployment(Workload workload) {
-        RollableScalableResource<Deployment> existWorkload = this.kubernetesClient.apps().deployments()
-                .inNamespace(workload.getNameSpace())
-                .withName(workload.getName());
-        if(existWorkload != null) {
-            List<StatusDetails> deleteResults = existWorkload.delete();
+        String namespace = workload.getNameSpace();
 
-            workload.setStatus(StatusType.Define);
-            return workload;
-        } else return null;
+        String yaml = this.getDeploymentYaml(workload);
+        InputStream in = new ByteArrayInputStream(yaml.getBytes());
+        List<HasMetadata> newResources = this.kubernetesClient.load(in).get();
+        if (newResources != null) {
+            newResources.forEach(resource -> {
+                List<StatusDetails> result = this.kubernetesClient.resource(resource).inNamespace(namespace).delete();
+                if(result.size() > 0 && "Deployment".equals(result.get(0).getKind())) {
+                    workload.setStatus(StatusType.Define);
+                }
+            });
+        }
+
+        String existNamespace = this.getNamespace(namespace);
+        if(existNamespace != null) {
+            this.kubernetesClient.namespaces().withName(namespace).delete();
+        }
+
+        return workload;
     }
 
     protected Workload fromDeployment(Deployment deployment) {
-        Palette palette = paletteRepository.findByName(deployment.getMetadata().getLabels().get("palette"));
-        Workspace workspace = workspaceRepository.findByName(deployment.getMetadata().getNamespace());
-        return new Workload(null,
-                palette,
-                deployment.getMetadata().getName(),
-                workspace,
-                (deployment.getStatus().getReadyReplicas()==deployment.getStatus().getReplicas()
-                        ? StatusType.Running : StatusType.Deployed),
-                null
-        );
+        Workload workload = workloadRepository.findByName(deployment.getMetadata().getName());
+        if(workload != null) {
+            workload.setStatus(
+                    (deployment.getStatus().getReadyReplicas() == deployment.getStatus().getReplicas()
+                    ? StatusType.Running : StatusType.Deployed)
+            );
+        }
+        return workload;
     }
 
     public String getNamespace(String name) {

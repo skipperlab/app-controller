@@ -1,32 +1,40 @@
+###############################################
 ###
-GET http://localhost:8080/api
+POST http://localhost:8080/api/commands
+Content-Type: application/json
 
-
-###
-GET http://localhost:8080/api/palettes
-###
-GET http://localhost:8080/api/topics
-###
-GET http://localhost:8080/api/workloads
-###
-GET http://localhost:8080/api/workspaces
-
-
-###
-GET http://localhost:8080/api/workloads/1/workspace
-###
-GET http://localhost:8080/api/workloads/1/palette
+{
+  "name": "create",
+  "commandType": 1,
+  "httpMethod": "POST",
+  "httpPath": "/connector",
+  "httpBody": "{\"name\": \"my-datagen\",\"config\": {\"connector.class\": \"io.confluent.kafka.connect.datagen.DatagenConnector\", \"kafka.topic\": \"my-topic\", \"quickstart\": \"users\" }}"
+}
 
 ###
-GET http://localhost:8080/api/palettes/search/findByName?name=DataGen
-###
-GET http://localhost:8080/api/topics/search/findByName?name=data-gen-topic
-###
-GET http://localhost:8080/api/workloads/search/findByName?name=data-gen-work
-###
-GET http://localhost:8080/api/workspaces/search/findByName?name=data-get-test
+POST http://localhost:8080/api/palettes
+Content-Type: application/json
 
+{
+  "name": "DataGen",
+  "kafkaType": 1,
+  "yamlPath": "connect.yaml",
+  "commands": ["command/1"],
+  "configTemplate": "[\"connect_name\", \"bootstrap_servers\", \"key_converter\", \"value_converter\", \"connect_replicas\"]"
+}
+###
 
+POST http://localhost:8080/api/kubernetes/yaml
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="connect.yaml"
+Content-Type: application/x-yaml
+
+< /Users/eric.yoo/works/app-controller/K8s/connect.yaml
+--WebAppBoundary--
+
+###############################################
 ###
 POST http://localhost:8080/api/workspaces
 Content-Type: application/json
@@ -34,7 +42,6 @@ Content-Type: application/json
 {
   "name": "data-get-test",
   "status": "Define",
-  "context": "{\"topics\":[{\"name\":\"data-gen-topic\"}],\"workloads\":[{\"name\":\"data-gen-work\"}]}",
   "config": "[{\"bootstrap_servers\":\"141.164.42.200:9092\"}, {\"key_converter\":\"org.apache.kafka.connect.json.JsonConverter\"}, {\"value_converter\":\"org.apache.kafka.connect.json.JsonConverter\"}, {\"connect_replicas\":1}]"
 }
 
@@ -51,18 +58,35 @@ Content-Type: application/json
 }
 
 ###
+GET http://localhost:8080/api/workspaces
+Content-Type: application/json
+###
+GET http://localhost:8080/api/palettes
+Content-Type: application/json
+###
+GET http://localhost:8080/api/topics
+Content-Type: application/json
+
+###
 POST http://localhost:8080/api/workloads
 Content-Type: application/json
 
 {
   "name": "data-gen-work",
-  "palette": "palette/10001",
+  "palette": "palette/1",
   "status": "Define",
   "workspace": "workspace/1",
+  "inputTopics": "[]",
+  "outputTopics": "[\"data-gen-topic\"]",
   "config": "[{\"connect_name\":\"data-gen-work\"}]"
 }
 
+###############################################
+###
+POST http://localhost:8080/api/deploy/do/1
+Content-Type: application/json
 
+{}
 
 ###
 GET http://localhost:8080/api/deploy/status/1
@@ -70,12 +94,6 @@ Content-Type: application/json
 
 ###
 POST http://localhost:8080/api/deploy/status/1
-Content-Type: application/json
-
-{}
-
-###
-POST http://localhost:8080/api/deploy/do/1
 Content-Type: application/json
 
 {}

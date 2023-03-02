@@ -20,6 +20,7 @@ spring:
     bootstrap-servers: localhost:9092
 kubernetes:
   master-url: https://localhost:6443/
+  upload-dir: ./yaml
 logging:
   level:
     org:
