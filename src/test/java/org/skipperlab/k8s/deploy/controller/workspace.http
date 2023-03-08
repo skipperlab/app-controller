@@ -8,7 +8,7 @@ Content-Type: application/json
   "kafkaType": 1,
   "yamlPath": "connect.yaml",
   "commands": ["command/1"],
-  "configTemplate": "[\"connect_name\", \"bootstrap_servers\", \"key_converter\", \"value_converter\", \"connect_replicas\"]"
+  "configTemplate": "[\"bootstrap_servers\", \"key_converter\", \"value_converter\", \"connect_replicas\"]"
 }
 ###
 
@@ -28,11 +28,11 @@ Content-Type: application/json
 
 {
   "name": "create",
-  "commandType": 1,
+  "commandType": 0,
   "palette": "palette/1",
   "httpMethod": "POST",
-  "httpPath": "/connector",
-  "httpBody": "{\"name\": \"my-datagen\",\"config\": {\"connector.class\": \"io.confluent.kafka.connect.datagen.DatagenConnector\", \"kafka.topic\": \"my-topic\", \"quickstart\": \"users\" }}"
+  "httpPath": "/connectors",
+  "httpBody": "{\"name\": \"${name}\",\"config\": {\"connector.class\": \"io.confluent.kafka.connect.datagen.DatagenConnector\", \"kafka.topic\": \"${outputTopic}\", \"quickstart\": \"users\" }}"
 }
 
 ###############################################
@@ -80,8 +80,8 @@ Content-Type: application/json
   "palette": "palette/1",
   "status": "Define",
   "workspace": "workspace/1",
-  "inputTopics": "[]",
-  "outputTopics": "[\"data-gen-topic\"]",
+  "inputTopics": "",
+  "outputTopics": "data-gen-topic",
   "config": "[{\"connect_name\":\"data-gen-work\"}]"
 }
 
@@ -101,9 +101,10 @@ POST http://localhost:8080/api/deploy/status/1
 Content-Type: application/json
 
 {
-  "command": "Create"
+  "command": "Pause"
 }
 
 ###
 DELETE http://localhost:8080/api/deploy/do/1
 Content-Type: application/json
+

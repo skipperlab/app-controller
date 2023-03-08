@@ -17,10 +17,14 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
-import java.io.*;
+import java.io.Reader;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.io.Writer;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -144,26 +148,80 @@ public class DeployService {
             List<Workload> workloads = this.workloadRepository.findByWorkspaceId(workspace.getId());
             workloads.forEach(workload -> {
                 Palette palette = workload.getPalette();
-                List<Command> commands = this.commandRepository.findByPaletteId(palette.getId()).stream()
-                        .filter(command -> command.getCommandType() == commandType)
-                        .collect(Collectors.toList());
-                commands.forEach(command -> {
-                    commandResults.add(this.callHttpCommand(command, workload));
-                });
+                if (Arrays.asList(new KafkaType[]{KafkaType.Consumer, KafkaType.Producer}).contains(palette.getKafkaType())
+                    && ! Arrays.asList(new CommandType[]{CommandType.Create, CommandType.Update}).contains(commandType)) {
+                    commandResults.add(this.callConnectCommand(commandType, workload));
+                } else {
+                    List<Command> commands = this.commandRepository.findByPaletteId(palette.getId()).stream()
+                            .filter(command -> command.getCommandType() == commandType)
+                            .collect(Collectors.toList());
+                    commands.forEach(command -> {
+                        commandResults.add(this.callHttpCommand(command, workload));
+                    });
+                }
             });
             ((ObjectNode)result).putArray("commandResults").addAll(commandResults);
         }
         return result;
     }
 
+    private JsonNode callConnectCommand(CommandType commandType, Workload workload) {
+        String host = "http://" + this.kubernetesService.getServiceUrl(workload);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpMethod method;
+        String path;
+        switch (commandType) {
+            case Delete:
+                method = HttpMethod.DELETE;
+                path="/connectors/"+workload.getName();
+                break;
+            case Pause:
+                method = HttpMethod.PUT;
+                path="/connectors/"+workload.getName()+"/pause";
+                break;
+            case Resume:
+                method = HttpMethod.PUT;
+                path="/connectors/"+workload.getName()+"/resume";
+                break;
+            case Restart:
+                method = HttpMethod.POST;
+                path="/connectors/"+workload.getName()+"/restart";
+                break;
+            case List:
+                method = HttpMethod.GET;
+                path="/connectors";
+                break;
+            case Get:
+                method = HttpMethod.GET;
+                path="/connectors/"+workload.getName();
+                break;
+            case ConnectorPlugins:
+                method = HttpMethod.GET;
+                path="/connector-plugins";
+                break;
+            default:
+                method = HttpMethod.GET;
+                path="/connectors/"+workload.getName()+"/status";
+                break;
+        }
+        HttpEntity<String> entity = new HttpEntity<>(null, headers);
+        try {
+            return this.restTemplate.exchange(host + path, method, entity, JsonNode.class).getBody();
+        } catch (HttpClientErrorException exception) {
+            return exception.getResponseBodyAs(JsonNode.class);
+        }
+    }
+
     private JsonNode callHttpCommand(Command command, Workload workload) {
-        String url = "http://" + this.kubernetesService.getServiceUrl(workload) + command.getHttpPath();
+        String url = "http://" + this.kubernetesService.getServiceUrl(workload) + command.getHttpPath().replace("${name}", workload.getName());
         HttpMethod method = HttpMethod.valueOf(command.getHttpMethod());
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        Map<String, Object> root = new HashMap<>();
+        Map<String, Object> root = this.kubernetesService.getRootFromWorkload(workload);
         this.kubernetesService.getConfig(workload.getWorkspace().getConfig(), root);
         this.kubernetesService.getConfig(workload.getConfig(), root);
         Reader in = new StringReader(command.getHttpBody());

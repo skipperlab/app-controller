@@ -1,7 +1,6 @@
 package org.skipperlab.k8s.deploy.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import net.minidev.json.JSONArray;
 import org.skipperlab.k8s.deploy.model.CommandType;
 import org.skipperlab.k8s.deploy.model.Workspace;
 import org.skipperlab.k8s.deploy.repository.WorkspaceRepository;
@@ -44,7 +43,7 @@ public class DeployController {
     }
 
     @PostMapping("/do/{id}")
-    public Workspace doDeploy(@PathVariable Long id, @RequestBody JSONArray config) {
+    public Workspace doDeploy(@PathVariable Long id, @RequestBody JsonNode config) {
         Optional<Workspace> workspace = this.workspaceRepository.findById(id);
         if(workspace.isPresent()) {
             return this.deployService.doDeploy(workspace.get());

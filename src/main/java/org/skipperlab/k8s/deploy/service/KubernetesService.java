@@ -86,7 +86,7 @@ public class KubernetesService {
     }
 
     protected String getDeploymentYaml(Workload workload) {
-        Map<String, Object> root = new HashMap<>();
+        Map<String, Object> root = this.getRootFromWorkload(workload);
         this.getConfig(workload.getWorkspace().getConfig(), root);
         this.getConfig(workload.getConfig(), root);
 
@@ -109,6 +109,14 @@ public class KubernetesService {
         }
 
         return out.toString();
+    }
+
+    public Map<String, Object> getRootFromWorkload(Workload workload) {
+        return new HashMap<>(){{
+            put("name", workload.getName());
+            put("inputTopic", workload.getInputTopics());
+            put("outputTopic", workload.getOutputTopics());
+        }};
     }
 
     public void getConfig(String configStr, Map<String, Object> root) {
@@ -168,7 +176,28 @@ public class KubernetesService {
                 .inNamespace(workload.getNameSpace())
                 .withName(workload.getName()).get();
         if(service != null) {
-            return service.getSpec().getClusterIP() + ":" + service.getSpec().getPorts().get(0).getPort();
+            switch (service.getSpec().getType()) {
+                case "LoadBalancer":
+                    return service.getStatus().getLoadBalancer().getIngress().get(0).getIp() + ":" + service.getSpec().getPorts().get(0).getPort();
+                case "NodePort":
+                    Deployment deployment = this.kubernetesClient.apps().deployments()
+                            .inNamespace(workload.getNameSpace())
+                            .withName(workload.getName()).get();
+                    if (deployment != null) {
+                        List<Pod> podList = kubernetesClient.pods()
+                                .inNamespace(workload.getNameSpace())
+                                .withLabels(deployment.getSpec().getSelector().getMatchLabels())
+                                .list().getItems();
+                        if (podList.size() > 0) {
+                            Node node = this.kubernetesClient.nodes().withName(podList.get(0).getSpec().getNodeName()).get();
+                            if (node != null) {
+                                return node.getStatus().getAddresses().get(0).getAddress() + ":" + service.getSpec().getPorts().get(0).getNodePort();
+                            }
+                        }
+                    }
+                default:
+                    return service.getSpec().getClusterIP() + ":" + service.getSpec().getPorts().get(0).getPort();
+            }
         } else {
             Deployment deployment = this.kubernetesClient.apps().deployments()
                     .inNamespace(workload.getNameSpace())

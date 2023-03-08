@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: ${connect_name}
+  name: ${name}
 data:
   connect-distributed.properties: |
     bootstrap.servers=${bootstrap_servers}
     plugin.path=/opt/connectors
-    group.id=${connect_name}
+    group.id=${name}
     key.converter=<#if key_converter??>${key_converter}<#else>org.apache.kafka.connect.string.StringConverter</#if>
     key.converter.schemas.enable=true
     value.converter=<#if value_converter??>${value_converter}<#else>org.apache.kafka.connect.string.StringConverter</#if>
@@ -41,42 +41,56 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ${connect_name}
+  name: ${name}
   labels:
-    app: ${connect_name}
+    app: ${name}
 spec:
   replicas: ${connect_replicas}
   selector:
     matchLabels:
-      app: ${connect_name}
+      app: ${name}
   template:
     metadata:
       labels:
-        app: ${connect_name}
+        app: ${name}
     spec:
       containers:
-        - name: ${connect_name}
+        - name: ${name}
           image: skipperlab/connect:v3.3.2
           command: ["connect-distributed.sh", "config/connect-distributed.properties"]
           ports:
             - containerPort: 8083
           volumeMounts:
-            - name: config-${connect_name}
+            - name: config-${name}
               mountPath: "/opt/kafka/config"
               readOnly: true
-            - name: connectors-${connect_name}
+            - name: connectors-${name}
               mountPath: "/opt/connectors"
               readOnly: true
       volumes:
-        - name: config-${connect_name}
+        - name: config-${name}
           configMap:
-            name: ${connect_name}
+            name: ${name}
             items:
               - key: "connect-log4j.properties"
                 path: "connect-log4j.properties"
               - key: "connect-distributed.properties"
                 path: "connect-distributed.properties"
-        - name: connectors-${connect_name}
+        - name: connectors-${name}
           nfs:
             server: 141.164.42.200
             path: /opt/share
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${name}
+spec:
+  selector:
+    app: ${name}
+  type: NodePort
+  ports:
+    - name: http
+      protocol: TCP
+      port: 18083
+      targetPort: 8083

@@ -6,7 +6,9 @@ public enum CommandType {
     Delete,
     Pause,
     Resume,
+    Restart,
     List,
+    ConnectorPlugins,
     Get,
     Status
 }
