@@ -19,8 +19,6 @@ public class Palette {
     private String name;
     private KafkaType kafkaType;
     private String yamlPath;
-    @ManyToMany
-    private List<Command> commands;
     @Column(columnDefinition = "TEXT")
     private String configTemplate;
 }

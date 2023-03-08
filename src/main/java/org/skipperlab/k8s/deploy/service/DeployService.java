@@ -1,14 +1,30 @@
 package org.skipperlab.k8s.deploy.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import freemarker.template.Configuration;
+import freemarker.template.Template;
 import org.skipperlab.k8s.deploy.model.*;
+import org.skipperlab.k8s.deploy.repository.CommandRepository;
+import org.skipperlab.k8s.deploy.repository.PaletteRepository;
 import org.skipperlab.k8s.deploy.repository.TopicRepository;
 import org.skipperlab.k8s.deploy.repository.WorkloadRepository;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
+import java.io.*;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -17,19 +33,27 @@ public class DeployService {
     private final KafkaService kafkaService;
     private final KubernetesService kubernetesService;
     private final WorkloadRepository workloadRepository;
+    private final CommandRepository commandRepository;
+    private final PaletteRepository paletteRepository;
     private final TopicRepository topicRepository;
+    private final Configuration freeMakerCfg;
     private ObjectMapper objectMapper;
+    private RestTemplate restTemplate;
 
-    public DeployService(KafkaService kafkaService, KubernetesService kubernetesService, WorkloadRepository workloadRepository, TopicRepository topicRepository) {
+    public DeployService(KafkaService kafkaService, KubernetesService kubernetesService, WorkloadRepository workloadRepository, CommandRepository commandRepository, PaletteRepository paletteRepository, TopicRepository topicRepository, Configuration freeMakerCfg) {
         this.kafkaService = kafkaService;
         this.kubernetesService = kubernetesService;
         this.workloadRepository = workloadRepository;
+        this.commandRepository = commandRepository;
+        this.paletteRepository = paletteRepository;
         this.topicRepository = topicRepository;
+        this.freeMakerCfg = freeMakerCfg;
         this.objectMapper = new ObjectMapper();
+        this.restTemplate = new RestTemplate();
     }
 
     public Workspace doDeploy(Workspace workspace) {
-        Workspace existWorkspace = this.getStatus(workspace);
+        Workspace existWorkspace = this.getWorkspaceStatus(workspace);
         if (Arrays.asList(new StatusType[]{StatusType.Define, StatusType.Deployed})
                 .contains(existWorkspace.getStatus()))
         {
@@ -57,6 +81,16 @@ public class DeployService {
         return workspace;
     }
 
+    private Workspace getWorkspaceStatus(Workspace workspace) {
+        String namespace = this.kubernetesService.getNamespace(workspace.getName());
+        if(namespace == null && workspace.getStatus() != StatusType.Define ) {
+            workspace.setStatus(StatusType.Define);
+        } else if (namespace != null && workspace.getStatus() == StatusType.Define) {
+            workspace.setStatus(StatusType.Deployed);
+        }
+        return workspace;
+    }
+
     private List<Topic> getTopics(List<Workload> workloads) {
         List<Topic> result = workloads.stream()
                 .flatMap(workload -> {
@@ -75,7 +109,7 @@ public class DeployService {
     }
 
     public Workspace undoDeploy(Workspace workspace) {
-        Workspace existWorkspace = this.getStatus(workspace);
+        Workspace existWorkspace = this.getWorkspaceStatus(workspace);
         if (Arrays.asList(new StatusType[]{StatusType.Deployed, StatusType.Running, StatusType.Stop, StatusType.Done, StatusType.Error})
                 .contains(existWorkspace.getStatus()))
         {
@@ -94,33 +128,60 @@ public class DeployService {
         return null;
     }
 
-    public Workspace setStatus(Workspace workspace, CommandType commandType) {
-        Workspace existWorkspace = this.getStatus(workspace);
+    public JsonNode setStatus(Workspace workspace, CommandType commandType) {
+        JsonNode result = null;
+        Workspace existWorkspace = this.getWorkspaceStatus(workspace);
         if (Arrays.asList(new StatusType[]{StatusType.Deployed, StatusType.Running, StatusType.Stop, StatusType.Done, StatusType.Error})
                 .contains(existWorkspace.getStatus()))
         {
+            result = this.objectMapper.valueToTree(existWorkspace);
+            ArrayNode commandResults;
+            try {
+                commandResults = this.objectMapper.readValue("[]", ArrayNode.class);
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException(e);
+            }
             List<Workload> workloads = this.workloadRepository.findByWorkspaceId(workspace.getId());
             workloads.forEach(workload -> {
-                try {
-                    Workload existWorkload = this.kubernetesService.getDeployment(workload.getName(), workload.getNameSpace());
-                    if(existWorkload != null) {
-                        this.workloadRepository.save(existWorkload);
-                    }
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
+                Palette palette = workload.getPalette();
+                List<Command> commands = this.commandRepository.findByPaletteId(palette.getId()).stream()
+                        .filter(command -> command.getCommandType() == commandType)
+                        .collect(Collectors.toList());
+                commands.forEach(command -> {
+                    commandResults.add(this.callHttpCommand(command, workload));
+                });
             });
+            ((ObjectNode)result).putArray("commandResults").addAll(commandResults);
         }
-        return null;
+        return result;
     }
 
-    public Workspace getStatus(Workspace workspace) {
-        String namespace = this.kubernetesService.getNamespace(workspace.getName());
-        if(namespace == null) {
-            workspace.setStatus(StatusType.Define);
-        } else if(workspace.getStatus() == StatusType.Define) {
-            workspace.setStatus(StatusType.Deployed);
+    private JsonNode callHttpCommand(Command command, Workload workload) {
+        String url = "http://" + this.kubernetesService.getServiceUrl(workload) + command.getHttpPath();
+        HttpMethod method = HttpMethod.valueOf(command.getHttpMethod());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        Map<String, Object> root = new HashMap<>();
+        this.kubernetesService.getConfig(workload.getWorkspace().getConfig(), root);
+        this.kubernetesService.getConfig(workload.getConfig(), root);
+        Reader in = new StringReader(command.getHttpBody());
+        Writer out = new StringWriter();
+        Template template = null;
+        try {
+            template = new Template("CMD_" + command.getId().toString(), in, this.freeMakerCfg);
+            template.process(root, out);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
-        return workspace;
+        String requestBody = out.toString();
+        HttpEntity<String> entity = new HttpEntity<>(requestBody, headers);
+
+        return this.restTemplate.exchange(url, method, entity, JsonNode.class).getBody();
+    }
+
+    public JsonNode getStatus(Workspace workspace) {
+        return this.setStatus(workspace, CommandType.Status);
     }
 }

@@ -28,6 +28,7 @@ public class Workload {
     private StatusType status;
     @Column(columnDefinition = "TEXT")
     private String config;
+
     public String getNameSpace() {
         if(workspace != null) return workspace.getName();
         else return this.getName();

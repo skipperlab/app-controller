@@ -5,10 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
-import io.fabric8.kubernetes.api.model.HasMetadata;
-import io.fabric8.kubernetes.api.model.Namespace;
-import io.fabric8.kubernetes.api.model.NamespaceBuilder;
-import io.fabric8.kubernetes.api.model.StatusDetails;
+import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.RollableScalableResource;
@@ -105,7 +102,7 @@ public class KubernetesService {
         Writer out = new StringWriter();
         Template template = null;
         try {
-            template = new Template(workload.getName(), in, this.freeMakerCfg);
+            template = new Template("WORK_" +workload.getId().toString(), in, this.freeMakerCfg);
             template.process(root, out);
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -114,7 +111,7 @@ public class KubernetesService {
         return out.toString();
     }
 
-    private void getConfig(String configStr, Map<String, Object> root) {
+    public void getConfig(String configStr, Map<String, Object> root) {
         try {
             Iterable<JsonNode> configs = this.objectMapper.readTree(configStr);
             for (JsonNode config : configs) {
@@ -164,5 +161,50 @@ public class KubernetesService {
         Namespace namespace = this.kubernetesClient.namespaces().withName(name).get();
         if(namespace != null) return name;
         else return null;
+    }
+
+    public String getServiceUrl(Workload workload) {
+        io.fabric8.kubernetes.api.model.Service service = this.kubernetesClient.services()
+                .inNamespace(workload.getNameSpace())
+                .withName(workload.getName()).get();
+        if(service != null) {
+            return service.getSpec().getClusterIP() + ":" + service.getSpec().getPorts().get(0).getPort();
+        } else {
+            Deployment deployment = this.kubernetesClient.apps().deployments()
+                    .inNamespace(workload.getNameSpace())
+                    .withName(workload.getName()).get();
+            if (deployment != null) {
+                String selector = deployment.getSpec().getSelector().getMatchLabels().toString();
+                Map<String, String> matchLabels = this.parseSelector(selector);
+                PodList podList = this.kubernetesClient.pods()
+                        .inNamespace(workload.getNameSpace())
+                        .withLabels(matchLabels).list();
+                if (podList != null && podList.getItems().size() > 0) {
+                    Pod pod = podList.getItems().get(0);
+                    List<Container> containerList = pod.getSpec().getContainers();
+                    if (containerList != null && containerList.size() > 0) {
+                        Container container = containerList.get(0);
+                        List<ContainerPort> portList = container.getPorts();
+                        if (portList != null && portList.size() > 0) {
+                            ContainerPort port = portList.get(0);
+                            return pod.getStatus().getPodIP() + ":" + port.getContainerPort();
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private Map<String, String> parseSelector(String selector) {
+        Map<String, String> matchLabels = new HashMap<>();
+        String[] selectorParts = selector.substring(1, selector.length() - 1).split(",");
+        for (String part : selectorParts) {
+            String[] labelParts = part.trim().split("=");
+            if (labelParts.length == 2) {
+                matchLabels.put(labelParts[0], labelParts[1].replaceAll("'", ""));
+            }
+        }
+        return matchLabels;
     }
 }

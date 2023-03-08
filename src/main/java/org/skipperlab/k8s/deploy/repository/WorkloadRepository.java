@@ -12,6 +12,6 @@ import java.util.List;
 @RepositoryRestResource(collectionResourceRel = "workloads", path = "workloads")
 public interface WorkloadRepository extends JpaRepository<Workload, Long> {
     Workload findByName(@Param("name") String name);
-
     List<Workload> findByWorkspaceId(@Param("workspaceId") Long workspaceId);
+    List<Workload> findByPaletteId(@Param("paletteId") Long paletteId);
 }

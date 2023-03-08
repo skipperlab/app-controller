@@ -17,8 +17,9 @@ public class Command {
     private Long id;
     private String name;
     private CommandType commandType;
-    @ManyToMany(mappedBy = "commands")
-    private List<Palette> palettes;
+    @ManyToOne
+    @JoinColumn(name="palette_id")
+    private Palette palette;
     private String httpMethod;
     private String httpPath;
     private String httpBody;

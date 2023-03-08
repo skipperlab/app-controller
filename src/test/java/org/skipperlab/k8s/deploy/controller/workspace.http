@@ -1,17 +1,5 @@
 ###############################################
 ###
-POST http://localhost:8080/api/commands
-Content-Type: application/json
-
-{
-  "name": "create",
-  "commandType": 1,
-  "httpMethod": "POST",
-  "httpPath": "/connector",
-  "httpBody": "{\"name\": \"my-datagen\",\"config\": {\"connector.class\": \"io.confluent.kafka.connect.datagen.DatagenConnector\", \"kafka.topic\": \"my-topic\", \"quickstart\": \"users\" }}"
-}
-
-###
 POST http://localhost:8080/api/palettes
 Content-Type: application/json
 
@@ -33,6 +21,19 @@ Content-Type: application/x-yaml
 
 < /Users/eric.yoo/works/app-controller/K8s/connect.yaml
 --WebAppBoundary--
+
+###
+POST http://localhost:8080/api/commands
+Content-Type: application/json
+
+{
+  "name": "create",
+  "commandType": 1,
+  "palette": "palette/1",
+  "httpMethod": "POST",
+  "httpPath": "/connector",
+  "httpBody": "{\"name\": \"my-datagen\",\"config\": {\"connector.class\": \"io.confluent.kafka.connect.datagen.DatagenConnector\", \"kafka.topic\": \"my-topic\", \"quickstart\": \"users\" }}"
+}
 
 ###############################################
 ###
@@ -66,6 +67,9 @@ Content-Type: application/json
 ###
 GET http://localhost:8080/api/topics
 Content-Type: application/json
+###
+GET http://localhost:8080/api/commands
+Content-Type: application/json
 
 ###
 POST http://localhost:8080/api/workloads
@@ -96,7 +100,9 @@ Content-Type: application/json
 POST http://localhost:8080/api/deploy/status/1
 Content-Type: application/json
 
-{}
+{
+  "command": "Create"
+}
 
 ###
 DELETE http://localhost:8080/api/deploy/do/1

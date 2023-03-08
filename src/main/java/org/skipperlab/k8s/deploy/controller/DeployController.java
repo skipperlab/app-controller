@@ -3,7 +3,6 @@ package org.skipperlab.k8s.deploy.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import net.minidev.json.JSONArray;
 import org.skipperlab.k8s.deploy.model.CommandType;
-import org.skipperlab.k8s.deploy.model.StatusType;
 import org.skipperlab.k8s.deploy.model.Workspace;
 import org.skipperlab.k8s.deploy.repository.WorkspaceRepository;
 import org.skipperlab.k8s.deploy.service.DeployService;
@@ -24,7 +23,7 @@ public class DeployController {
     }
 
     @GetMapping("/status/{id}")
-    public Workspace getStatues(@PathVariable Long id) {
+    public JsonNode getStatues(@PathVariable Long id) {
         Optional<Workspace> workspace = this.workspaceRepository.findById(id);
         if(workspace.isPresent()) {
             return this.deployService.getStatus(workspace.get());
@@ -34,7 +33,7 @@ public class DeployController {
     }
 
     @PostMapping("/status/{id}")
-    public Workspace setStatus(@PathVariable Long id, @RequestBody JsonNode body) {
+    public JsonNode setStatus(@PathVariable Long id, @RequestBody JsonNode body) {
         Optional<Workspace> workspace = this.workspaceRepository.findById(id);
         if(workspace.isPresent()) {
             String command = body.get("command").asText("Status");
